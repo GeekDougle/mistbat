@@ -427,6 +427,8 @@ def remoteupdate(exchange):
         loaders.gdax.update_from_remote()
     elif exchange == "binance":
         loaders.binance.update_from_remote()
+    elif exchange == "ledger_csv":
+        loaders.ledger_csv.update_from_remote()
     else:
         print("Bad exchange specified.")
 
