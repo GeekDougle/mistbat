@@ -42,14 +42,16 @@ def update_from_remote():
             else:
                 duplicate.add(i)
     #remove the duplicates from the transaction list
-    for x in duplicate:
-        del transactions[x]
-    print('{} duplicate transactions deleted.  Check your source files to prevent this.'.format(len(duplicate)))
-    
+    if len(duplicate) >0:
+        for x in duplicate:
+            del transactions[x]
+        print('{} duplicate transactions deleted.'.format(len(duplicate)))
+        
     #Get deposits and withdrawals
     deposits = [t for t in transactions if t['Operation Type'] == 'IN']
     print("{} deposit transactions imported.".format(len(deposits)))
     withdraws = [t for t in transactions if t['Operation Type'] == 'OUT']
+    print("{} withdrawal transactions imported.".format(len(withdraws)))
     b_resources = {"deposits": deposits, "withdraws": withdraws}
 
     #write the file out
@@ -59,84 +61,39 @@ def update_from_remote():
 
 
 def parse_events():
-    """Take json file of binance transactions and parse into Event instances.
+    """Take json file of Ledger transactions and parse into Event instances.
     Returns:
       A list of instances of Event subclasses (e.g., Exchange, FiatExchange, Send)
+      The location is "Ledger"+ the text in the Account Name field.
     """
     # Returns Exchanges, Sends, Receives
     # Does not do things like parse into Coins
     events = []
-    """
+
     # Load up the JSON file
     with open(data_file_path, "r") as f:
         json_data = json.load(f)
 
-    for obs in json_data["deposits"]["depositList"]:
-        # Handle differing Bitcoin Cash symbols
-        if obs["asset"] == "BCC":
-            obs["asset"] = "BCH"
-
+    # Format deposits as Receive Events
+    for obs in json_data["deposits"]:
         receive = Receive(
-            time=obs["insertTime"],
-            location="binance",
-            coin=obs["asset"],
-            amount=float(obs["amount"]),
-            txid=obs["txId"],
+            time=obs["Operation Date"],
+            location="Ledger" + '-' + obs['Account Name'],
+            coin=obs["Currency Ticker"],
+            amount=float(obs["Operation Amount"]),
+            txid=obs["Operation Hash"],
         )
         events.append(receive)
 
-    for obs in json_data["withdraws"]["withdrawList"]:
-        # Handle differing Bitcoin Cash symbols
-        if obs["asset"] == "BCC":
-            obs["asset"] = "BCH"
-
+    # Format withdrawals as Send Events
+    for obs in json_data["withdraws"]:
         send = Send(
-            time=obs["applyTime"],
-            location="binance",
-            coin=obs["asset"],
-            amount=float(obs["amount"]),
-            txid=obs["txId"],
+            time=obs["Operation Date"],
+            location="Ledger" + '-' + obs['Account Name'],
+            coin=obs["Currency Ticker"],
+            amount=float(obs["Operation Amount"]),
+            txid=obs["Operation Hash"],
         )
         events.append(send)
 
-    trades = json_data["trades"]
-    for pair in trades:
-        if len(trades[pair]) == 0:
-            continue
-
-        # Only handle 3 char coins for now
-        assert len(pair) == 6
-        base_currency = pair[:3]
-        quote_currency = pair[3:]
-
-        # Handle differing Bitcoin Cash symbols
-        if base_currency == "BCC":
-            base_currency = "BCH"
-        if quote_currency == "BCC":
-            quote_currency = "BCH"
-
-        for obs in trades[pair]:
-            if obs["isBuyer"]:
-                buy_coin = base_currency
-                sell_coin = quote_currency
-                buy_amount = float(obs["qty"])
-                sell_amount = round(float(obs["price"]) * float(obs["qty"]), 8)
-            else:
-                buy_coin = quote_currency
-                sell_coin = base_currency
-                sell_amount = float(obs["qty"])
-                buy_amount = round(float(obs["price"]) * float(obs["qty"]), 8)
-
-            exchange = Exchange(
-                time=obs["time"],
-                location="binance",
-                buy_coin=buy_coin,
-                buy_amount=buy_amount,
-                sell_coin=sell_coin,
-                sell_amount=sell_amount,
-                fee_with=obs["commissionAsset"],
-                fee_amount=float(obs["commission"]),
-            )
-            events.append(exchange)
-    """
     return events
