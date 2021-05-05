@@ -14,16 +14,16 @@ def update_from_remote():
     import csv
 
     #find files which match the format we expect.
-    print('Reading Ledger files from {}'.format(XDG_DATA_HOME))
+    print(f'Reading Ledger files from {XDG_DATA_HOME}')
     filenames = glob.glob(XDG_DATA_HOME+"/ledgerlive-operations*.csv")
-    print('Found {} Ledger files.'.format(len(filenames)))
+    print(f'Found {len(filenames)} Ledger files.')
     
     #read in the data from all the files found
     transactions = []
     for f in filenames:
         with open(f, newline='') as csvfile:
             transactions.extend(csv.DictReader(csvfile))
-    print('Found {} Ledger observations.'.format(len(transactions)))
+    print(f'Found {len(transactions)} Ledger observations.')
 
     #check for duplicate transaction hashes
     seen = set()
@@ -33,7 +33,7 @@ def update_from_remote():
         if x not in seen:
             seen.add(x)
         else:
-            print('Possible Duplicate found. Operation Hash: {}'.format(x))
+            print(f'Possible Duplicate found. Operation Hash: {x}')
             #TODO: Handle multiple duplicate instances
             #find previous instance of this transaction hash
             prev_instance = transactions[op_hash_list.index()]
@@ -45,17 +45,17 @@ def update_from_remote():
     if len(duplicate) >0:
         for x in duplicate:
             del transactions[x]
-        print('{} duplicate transactions deleted.'.format(len(duplicate)))
+        print(f'{len(duplicate)} duplicate transactions deleted.')
         
     #Get deposits and withdrawals
     deposits = [t for t in transactions if t['Operation Type'] == 'IN']
-    print("{} deposit transactions imported.".format(len(deposits)))
+    print(f"{len(deposits)} deposit transactions imported.")
     withdraws = [t for t in transactions if t['Operation Type'] == 'OUT']
-    print("{} withdrawal transactions imported.".format(len(withdraws)))
+    print(f"{len(withdraws)} withdrawal transactions imported.")
     b_resources = {"deposits": deposits, "withdraws": withdraws}
 
     #write the file out
-    print('Writing Ledger Data to {}...'.format(data_file_path))
+    print(f'Writing Ledger Data to {data_file_path}...')
     with open(data_file_path, "w") as f:
         f.write(json.dumps(b_resources, indent=2))
 
