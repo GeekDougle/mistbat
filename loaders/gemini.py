@@ -3,10 +3,13 @@ from events import *
 from xdg import XDG_DATA_HOME, XDG_CONFIG_HOME
 import time
 
+#location where the imported data should be stored
+data_file_path = XDG_DATA_HOME + "/mistbat/gemini.json"
+
 USE_SANDBOX = True
 
 def update_from_remote():
-    """Poll the binance API for transaction history and save as json file."""
+    """Poll the gemini API for transfer history and trade history and save as json file."""
     from gemini import PrivateClient, PublicClient
     import yaml
 
@@ -20,8 +23,10 @@ def update_from_remote():
 
     #read all transfers to/from Gemini
     transfers = pvt_client.get_past_transfers()
-    deposits = [t for t in transfers if t['type'] == "Deposit"]
-    withdraws = [t for t in transfers if t['type'] == "Withdrawal"]
+    print(f"Retrieved {len(transfers)} transfers.")
+    deposits = [t for t in transfers if (t['type'] == "Deposit") and (t['status'] != "Advanced")]
+    withdraws = [t for t in transfers if (t['type'] == "Withdrawal") and (t['status'] != "Advanced")]
+    print(f"Accepted {len(deposits)} deposits and {len(withdraws)} withdrawals.")
 
     b_resources = {"deposits": deposits, "withdraws": withdraws}
 
@@ -44,12 +49,12 @@ def update_from_remote():
 
     b_resources["trades"] = trades
 
-    with open(XDG_DATA_HOME + "/mistbat/binance.json", "w") as f:
+    with open(data_file_path, "w") as f:
         f.write(json.dumps(b_resources, indent=2))
 
 
 def parse_events():
-    """Take json file of binance transactions and parse into Event instances.
+    """Take json file of gemini transactions and parse into Event instances.
     Returns:
       A list of instances of Event subclasses (e.g., Exchange, FiatExchange, Send)
     """
@@ -58,40 +63,43 @@ def parse_events():
     events = []
 
     # Load up the JSON file
-    with open(XDG_DATA_HOME + "/mistbat/binance.json", "r") as f:
+    with open(data_file_path, "r") as f:
         json_data = json.load(f)
 
-    for obs in json_data["deposits"]["depositList"]:
+    for obs in json_data["deposits"]:
         # Handle differing Bitcoin Cash symbols
-        if obs["asset"] == "BCC":
-            obs["asset"] = "BCH"
+        if obs["currency"] == "BCC":
+            obs["currency"] = "BCH"
 
         receive = Receive(
-            time=obs["insertTime"],
-            location="binance",
-            coin=obs["asset"],
+            time=obs["timestampms"],
+            location="gemini",
+            coin=obs["currency"],
             amount=float(obs["amount"]),
-            txid=obs["txId"],
+            txid=obs["txHash"],
         )
         events.append(receive)
 
-    for obs in json_data["withdraws"]["withdrawList"]:
+    for obs in json_data["withdraws"]:
         # Handle differing Bitcoin Cash symbols
-        if obs["asset"] == "BCC":
-            obs["asset"] = "BCH"
+        if obs["currency"] == "BCC":
+            obs["currency"] = "BCH"
 
         send = Send(
-            time=obs["applyTime"],
-            location="binance",
-            coin=obs["asset"],
+            time=obs["timestampms"],
+            location="gemini",
+            coin=obs["currency"],
             amount=float(obs["amount"]),
-            txid=obs["txId"],
+            txid=obs["txHash"],
         )
         events.append(send)
 
-    trades = json_data["trades"]
-    for pair in trades:
-        if len(trades[pair]) == 0:
+    all_trades = json_data["trades"]
+    fiat_pairs = [pair for pair in all_trades if "USD" in pair]
+    exchange_pairs = [pair for pair in all_trades if not("USD" in pair)]
+    # process fiat trades
+    for pair in fiat_pairs:
+        if len(all_trades[pair]) == 0:
             continue
 
         # Only handle 3 char coins for now
@@ -105,28 +113,77 @@ def parse_events():
         if quote_currency == "BCC":
             quote_currency = "BCH"
 
-        for obs in trades[pair]:
-            if obs["isBuyer"]:
+        for obs in all_trades[pair]:
+            # Validation checks -- only processing USD
+            assert obs['fee_currency'] == "USD"
+
+            if obs["type"] == "Buy":
+                fiat_exchange = FiatExchange(
+                    time=obs["timestampms"],
+                    location="gemini",
+                    buy_coin=base_currency,
+                    buy_amount=float(obs["amount"]),
+                    sell_coin="USD",
+                    sell_amount=float(obs["price"]) * float(obs["amount"]),
+                    fee_with="USD",
+                    fee_amount=float(obs['fee_amount']),
+                    location_id=str(obs["tid"]),    # Event module requirees location ID be a string 
+                )
+            else:
+                fiat_exchange = FiatExchange(
+                    time=obs["timestampms"],
+                    location="gemini",
+                    sell_coin=base_currency,
+                    sell_amount=float(obs["amount"]),
+                    buy_coin="USD",
+                    buy_amount=float(obs["price"]) * float(obs["amount"]),
+                    fee_with="USD",
+                    fee_amount=float(obs['fee_amount']),
+                    location_id=str(obs["tid"]),    # Event module requirees location ID be a string 
+                )
+
+            events.append(fiat_exchange)
+
+    # process crypto<-->crypto trades
+    # TODO- TEST THIS.  I don't have sample data to test this yet...
+    for pair in exchange_pairs:
+        if len(all_trades[pair]) == 0:
+            continue
+
+        # Only handle 3 char coins for now
+        assert len(pair) == 6
+        base_currency = pair[:3]
+        quote_currency = pair[3:]
+
+        # Handle differing Bitcoin Cash symbols
+        if base_currency == "BCC":
+            base_currency = "BCH"
+        if quote_currency == "BCC":
+            quote_currency = "BCH"
+
+        for obs in all_trades[pair]:
+            if obs["type"] == "Buy":
                 buy_coin = base_currency
                 sell_coin = quote_currency
-                buy_amount = float(obs["qty"])
-                sell_amount = round(float(obs["price"]) * float(obs["qty"]), 8)
+                buy_amount = float(obs["amount"])
+                sell_amount = round(float(obs["amount"]) / float(obs["price"]), 8)
             else:
                 buy_coin = quote_currency
                 sell_coin = base_currency
-                sell_amount = float(obs["qty"])
-                buy_amount = round(float(obs["price"]) * float(obs["qty"]), 8)
+                sell_amount = float(obs["amount"])
+                buy_amount = round(float(obs["amount"]) / float(obs["price"]), 8)
 
             exchange = Exchange(
-                time=obs["time"],
-                location="binance",
+                time=obs["timestampms"],
+                location="gemini",
                 buy_coin=buy_coin,
                 buy_amount=buy_amount,
                 sell_coin=sell_coin,
                 sell_amount=sell_amount,
-                fee_with=obs["commissionAsset"],
-                fee_amount=float(obs["commission"]),
+                fee_with=obs["fee_currency"],
+                fee_amount=float(obs["fee_amount"]),
             )
             events.append(exchange)
+
 
     return events
