@@ -80,6 +80,7 @@ def parse_events():
             time=obs["Operation Date"],
             location="Ledger" + '-' + obs['Account Name'],
             coin=obs["Currency Ticker"],
+            # All my transfers are from Gemini, so the transaction fee is already captured in the fees that Gemini charges.
             amount=float(obs["Operation Amount"]),
             txid=obs["Operation Hash"],
         )
