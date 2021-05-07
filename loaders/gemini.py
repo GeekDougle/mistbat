@@ -24,7 +24,7 @@ def update_from_remote():
     #read all transfers to/from Gemini
     transfers = pvt_client.get_past_transfers()
     print(f"Retrieved {len(transfers)} transfers.")
-    deposits = [t for t in transfers if (t['type'] == "Deposit") and (t['status'] != "Advanced")]
+    deposits = [t for t in transfers if (t['type'] == "Deposit") and (t['currency'] != "USD")]
     withdraws = [t for t in transfers if (t['type'] == "Withdrawal") and (t['status'] != "Advanced")]
     print(f"Accepted {len(deposits)} deposits and {len(withdraws)} withdrawals.")
 
