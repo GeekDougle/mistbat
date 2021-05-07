@@ -201,9 +201,15 @@ def updatefmv(verbose):
     default=False,
 )
 @click.option(
-    "--year", help="Limit report to a particular year", is_flag=False, default=None
+    "--year", help="Limit report to a particular year", is_flag=False, default=None,
 )
-def tax(aggregated, year):
+@click.option(
+    "--method-SPECID", 
+    help="Selects the SPECID accounting method.  Uses FIFO if not specified.", 
+    is_flag=True, 
+    default=False
+)
+def tax(aggregated, year, method_specid):
     """Generate the information needed for IRS Form 8949"""
     events = get_events(loaders.all)
     transactions = get_transactions(events, XDG_CONFIG_HOME + "/mistbat/tx_match.yaml")
@@ -215,7 +221,10 @@ def tax(aggregated, year):
     )
     transactions = imply_fees(transactions)
 
-    form_8949 = Form8949(transactions)
+    if method_specid:
+        form_8949 = Form8949(transactions, "SPECID")
+    else:
+        form_8949 = Form8949(transactions, "FIFO")
 
     print("SHORT-TERM CAPITAL GAINS")
     table = PrettyTable(
@@ -263,7 +272,13 @@ def tax(aggregated, year):
     is_flag=True,
     default=False,
 )
-def currentbasis(harvest):
+@click.option(
+    "--method-SPECID", 
+    help="Selects the SPECID accounting method.  Uses FIFO if not specified.", 
+    is_flag=True, 
+    default=False
+)
+def currentbasis(harvest, method_specid):
     """See available basis by coin"""
     events = get_events(loaders.all)
     transactions = get_transactions(events, XDG_CONFIG_HOME + "/mistbat/tx_match.yaml")
@@ -275,7 +290,10 @@ def currentbasis(harvest):
     )
     transactions = imply_fees(transactions)
 
-    form_8949 = Form8949(transactions)
+    if method_specid:
+        form_8949 = Form8949(transactions, "SPECID")
+    else:
+        form_8949 = Form8949(transactions, "FIFO")
     print("\nAVAILABLE BASIS REPORT")
     print(
         "Note: Coin totals will slighly deviate from 'holdings' since SENDRECV fees do not impact basis.\n"

@@ -15,8 +15,11 @@ def _held_1yr(acquired, disposed):
 
 
 class Form8949(object):
-    def __init__(self, transactions):
-        self.method = "FIFO"  # This class only works for FIFO
+    def __init__(self, transactions, method):
+        if method in ['FIFO', "SPECID"]:
+            self.method = method
+        else:
+            assert method, '''Invalid tax tracking method.  Must be either "FIFO" or "SPECID".'''
         self.assets = self.generate_assets(transactions)
 
     def generate_assets(self, transactions):
@@ -43,7 +46,7 @@ class Form8949(object):
         """Term argument is 'short', 'long' or 'all'. Aggregate is whether to have a single disposition that is traced to multiple acquisitions appear as a single row."""
         all_rows = []
         for asset in self.assets.values():
-            tax_history = asset.tax_history(term, aggregated, year)
+            tax_history = asset.tax_history(term, aggregated, year, self.method)
             if len(tax_history):
                 all_rows.append([" "] * 6)
             all_rows.extend(tax_history)
@@ -62,18 +65,16 @@ class Asset(object):
 
     def current_available_basis(self):
         self.transactions.sort(key=lambda x: x.time)
-        available_basis = self._tx_used_basis(self.transactions[-1], True)
+        available_basis = self._tx_used_basis(self.transactions[-1], method, True)
         return available_basis
 
-    def tax_history(self, term, aggregated, year):
+    def tax_history(self, term, aggregated, year, method):
         self.transactions.sort(key=lambda x: x.time)
         tax_history = []
         for tx in self.transactions:
             if year and tx.time.year != int(year):
                 continue
-            used_basis = self._tx_used_basis(
-                tx
-            )  # What basis did the tx use up, if any.
+            used_basis = self._tx_used_basis(tx, method)  # What basis did the tx use up, if any.
             tax_impact = self._tax_impact(
                 tx, used_basis, term, aggregated
             )  # Calculate the tax impact of the tx based on the used basis and in the way we specify
@@ -81,7 +82,7 @@ class Asset(object):
                 tax_history.extend(tax_impact)
         return tax_history
 
-    def _tx_used_basis(self, tx, return_available_basis=False):
+    def _tx_used_basis(self, tx, method, return_available_basis=False):
         """Return an array that represents a row of Form 8949"""
         assert tx in self.transactions
         available_basis = []
@@ -92,12 +93,19 @@ class Asset(object):
             available_basis += filter(None, [tx_iter.basis_contribution(self.coin)])
             amount_realized = tx_iter.amount_realized(self.coin)
             if amount_realized:
+                # create a list of indecies into available_basis.  This allows the same base data_structure to be used w/ different accounting methods.
+                if method == "SPECID":
+                    # sort the array in descending cost basis
+                    sorted_avail_basis = sorted(available_basis, key=lambda tx:tx[2], reverse=True)
+                else:
+                    # use the array in chonological order.
+                    sorted_avail_basis = available_basis
                 # Match basis to amount realized
-                for basis in list(available_basis):
+                for basis in list(sorted_avail_basis):
                     basis = list(basis)
                     if (amount_realized[1] - matched_ar) < basis[1]:
                         # Chews up some but not all of this basis item
-                        available_basis[0][1] -= amount_realized[1] - matched_ar
+                        sorted_avail_basis[0][1] -= amount_realized[1] - matched_ar
                         used_basis += [
                             [basis[0], (amount_realized[1] - matched_ar), basis[2]]
                         ]
@@ -105,7 +113,11 @@ class Asset(object):
                         break
                     elif (amount_realized[1] - matched_ar) >= basis[1]:
                         # Chews up all of or more than this basis item
-                        del available_basis[0]
+                        if method == "SPECID":
+                            del available_basis[available_basis.index(basis)]
+                            del sorted_avail_basis[0]                            
+                        else:
+                            del available_basis[0]
                         used_basis += [basis]
                         matched_ar += basis[1]
                 assert round(matched_ar, 8) == round(amount_realized[1], 8), "Not enough basis to match"
