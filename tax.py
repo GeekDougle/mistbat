@@ -6,8 +6,8 @@ def _held_1yr(acquired, disposed):
     """Determine whether the trade qualifies for LT treatment"""
     acquired = acquired.date()
     min_date = dt.date(
-        year=acquired.year + 1, month=acquired.month, day=acquired.day + 1
-    )
+        year=acquired.year, month=acquired.month, day=acquired.day
+    ) + dt.timedelta(days=366)
     if disposed.date() >= min_date:
         return True
     else:
