@@ -105,3 +105,7 @@ ENV/
 
 .idea/
 .vscode/
+manual_obs.yaml
+secrets.yaml
+tx_annotations.yaml
+tx_match.yaml
