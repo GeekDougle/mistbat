@@ -36,13 +36,13 @@ def cli():
     pass
 
 
-@cli.command()
-@click.option(
-    "--remote-update",
-    help="Request updated events from exchange APIs",
-    is_flag=True,
-    default=False,
-)
+# @cli.command()
+# @click.option(
+#     "--remote-update",
+#     help="Request updated events from exchange APIs",
+#     is_flag=True,
+#     default=False,
+# )
 def lsev(remote_update):
     """List all events parsed from observations."""
     events = get_events(loaders.all, remote_update=remote_update)
@@ -54,17 +54,17 @@ def lsev(remote_update):
     print_usd_exposure()
 
 
-@cli.command()
-@click.option(
-    "--no-group",
-    help="Only show transactions without a group",
-    is_flag=True,
-    default=False,
-)
-@click.option("--no-annotations", help="Omit annotations", is_flag=True, default=False)
-@click.option(
-    "--minimal", help="Omit everything other than headline", is_flag=True, default=False
-)
+# @cli.command()
+# @click.option(
+#     "--no-group",
+#     help="Only show transactions without a group",
+#     is_flag=True,
+#     default=False,
+# )
+# @click.option("--no-annotations", help="Omit annotations", is_flag=True, default=False)
+# @click.option(
+#     "--minimal", help="Omit everything other than headline", is_flag=True, default=False
+# )
 def lstx(no_group, no_annotations, minimal):
     """List all transactions that have been derived from events and annotated."""
     events = get_events(loaders.all)
@@ -95,7 +95,7 @@ def lstx(no_group, no_annotations, minimal):
     print_usd_exposure()
 
 
-@cli.command()
+# @cli.command()
 def fees():
     events = get_events(loaders.all)
     transactions = get_transactions(events, XDG_CONFIG_HOME + "/mistbat/tx_match.yaml")
@@ -125,8 +125,8 @@ def fees():
     print("TOTAL: USD {:0.2f}\n".format(sum(fees.values())))
 
 
-@cli.command()
-@click.option("--verbose", help="Print progress", is_flag=True, default=False)
+# @cli.command()
+# @click.option("--verbose", help="Print progress", is_flag=True, default=False)
 def updatefmv(verbose):
     """Update the tx_fmv.yaml file for any missing figures"""
     # Load storage file and events and transactions
@@ -193,16 +193,16 @@ def updatefmv(verbose):
     )
 
 
-@cli.command()
-@click.option(
-    "--aggregated",
-    help="Aggregate single dispositions that can be traced to multiple acquisitions",
-    is_flag=True,
-    default=False,
-)
-@click.option(
-    "--year", help="Limit report to a particular year", is_flag=False, default=None
-)
+# @cli.command()
+# @click.option(
+#     "--aggregated",
+#     help="Aggregate single dispositions that can be traced to multiple acquisitions",
+#     is_flag=True,
+#     default=False,
+# )
+# @click.option(
+#     "--year", help="Limit report to a particular year", is_flag=False, default=None
+# )
 def tax(aggregated, year):
     """Generate the information needed for IRS Form 8949"""
     events = get_events(loaders.all)
@@ -256,13 +256,13 @@ def tax(aggregated, year):
     print(f"TOTAL LONG-TERM CAPITAL GAIN: USD {total_gain:0.2f}")
 
 
-@cli.command()
-@click.option(
-    "--harvest",
-    help="Add column showing cumulative gain or loss of selling that particular coin",
-    is_flag=True,
-    default=False,
-)
+# @cli.command()
+# @click.option(
+#     "--harvest",
+#     help="Add column showing cumulative gain or loss of selling that particular coin",
+#     is_flag=True,
+#     default=False,
+# )
 def currentbasis(harvest):
     """See available basis by coin"""
     events = get_events(loaders.all)
@@ -290,7 +290,8 @@ def currentbasis(harvest):
     if harvest:
         table_headings.append("Cum. G/L at Spot Price")
         spot_prices = get_coin_spot_prices(
-            set(form_8949.current_available_basis().keys()))
+            set(form_8949.current_available_basis().keys())
+        )
     table = PrettyTable(table_headings)
 
     for coin, available_basis in form_8949.current_available_basis().items():
@@ -317,13 +318,13 @@ def currentbasis(harvest):
     print(table)
 
 
-@cli.command()
-@click.option(
-    "--aggregated",
-    help="Aggregate holdings irrespective of location (exchange)",
-    is_flag=True,
-    default=False,
-)
+# @cli.command()
+# @click.option(
+#     "--aggregated",
+#     help="Aggregate holdings irrespective of location (exchange)",
+#     is_flag=True,
+#     default=False,
+# )
 def holdings(aggregated):
     """List all coins held with USD values. Also list holdings by exchange."""
     totals = {}
@@ -417,8 +418,8 @@ def holdings(aggregated):
     print("Total Portfolio Value: USD {:.2f}".format(total_usd))
 
 
-@cli.command()
-@click.argument("exchange")
+# @cli.command()
+# @click.argument("exchange")
 def remoteupdate(exchange):
     """Fetch updated coinbase information from remote"""
     if exchange == "coinbase":
