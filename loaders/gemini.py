@@ -8,6 +8,59 @@ data_file_path = XDG_DATA_HOME + "/mistbat/gemini.json"
 
 USE_SANDBOX = True
 
+# Print iterations progress
+def progressBar(iterable, prefix = '', suffix = '', decimals = 1, length = 100, fill = '█', printEnd = "\r"):
+    """
+    Call in a loop to create terminal progress bar
+    @params:
+        iterable    - Required  : iterable object (Iterable)
+        prefix      - Optional  : prefix string (Str)
+        suffix      - Optional  : suffix string (Str)
+        decimals    - Optional  : positive number of decimals in percent complete (Int)
+        length      - Optional  : character length of bar (Int)
+        fill        - Optional  : bar fill character (Str)
+        printEnd    - Optional  : end character (e.g. "\r", "\r\n") (Str)
+    from https://stackoverflow.com/questions/3173320/text-progress-bar-in-terminal-with-block-characters
+    """
+    total = len(iterable)
+    # Progress Bar Printing Function
+    def printProgressBar (iteration):
+        percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
+        filledLength = int(length * iteration // total)
+        bar = fill * filledLength + '-' * (length - filledLength)
+        print(f'\r{prefix} |{bar}| {percent}% {suffix}', end = printEnd)
+    # Initial Call
+    printProgressBar(0)
+    # Update Progress Bar
+    for i, item in enumerate(iterable):
+        yield item
+        printProgressBar(i + 1)
+    # Print New Line on Complete
+    print()
+
+def _parse_pair(pair_str):
+    '''Parses the pair string into the quote currency (first symbol) and the base currency (2nd symbol)'''
+    # Only handle 3 char coins for now unless one is USD
+    if "USD" in pair_str:
+        # is the USD the base or quote currency?
+        index = pair_str.find("USD")
+        if  index == 0:
+            base_currency = pair_str[:3]
+            quote_currency = pair_str[3:]
+        else:
+            base_currency = pair_str[:index]
+            quote_currency = pair_str[index:]
+    else:
+        assert len(pair_str) == 6
+    
+    # Handle differing Bitcoin Cash symbols
+    if base_currency == "BCC":
+        base_currency = "BCH"
+    if quote_currency == "BCC":
+        quote_currency = "BCH"
+    return(base_currency, quote_currency)
+
+
 def update_from_remote():
     """Poll the gemini API for transfer history and trade history and save as json file."""
     from gemini import PrivateClient, PublicClient
@@ -18,7 +71,7 @@ def update_from_remote():
     all_pairs = pub_client.symbols()    # pairs are lower case in the exchange
 
     # Open the private client to Gemini.
-    keys = yaml.load(open(XDG_CONFIG_HOME + "/config/secrets.yaml"))["gemini"]
+    keys = yaml.load(open(XDG_CONFIG_HOME + "/mistbat/secrets.yaml"))["gemini"]
     pvt_client = PrivateClient(keys["api_key"], keys["secret_key"])
 
     #read all transfers to/from Gemini
@@ -32,9 +85,7 @@ def update_from_remote():
 
     trades = {}
     print(f"Total pairs to loop through: {len(all_pairs)}")
-    for index, pair in enumerate(all_pairs):
-        if index % 10 == 0:
-            print(f"Currently: {index}")
+    for pair in progressBar(all_pairs, prefix = 'Progress:', suffix = 'Complete', length = 50):
         try:
             # convert pair to upper case
             trades[pair.upper()] = pvt_client.get_past_trades(symbol=pair)
@@ -42,10 +93,13 @@ def update_from_remote():
             print("API limit exceeded. Pausing for 5 seconds.")
             time.sleep(5)
             trades[pair.upper()] = pvt_client.get_past_trades(symbol=pair)
+                # 500 trades max per pair
+        assert len(trades[pair.upper()]) < 500  #TODO update script to handle >500 trades
+        #if gemini returns an error when pulling trades, drop the pair, but print a message
+        if 'result' in trades[pair.upper()]:
+            print(f"Error received from Gemini: {trades[pair.upper()]}")
+            del trades[pair.upper()]
             
-
-        # 500 trades max per pair
-        assert len(trades[pair.upper()]) < 500
 
     b_resources["trades"] = trades
 
@@ -102,16 +156,7 @@ def parse_events():
         if len(all_trades[pair]) == 0:
             continue
 
-        # Only handle 3 char coins for now
-        assert len(pair) == 6
-        base_currency = pair[:3]
-        quote_currency = pair[3:]
-
-        # Handle differing Bitcoin Cash symbols
-        if base_currency == "BCC":
-            base_currency = "BCH"
-        if quote_currency == "BCC":
-            quote_currency = "BCH"
+        base_currency, quote_currency = _parse_pair(pair)
 
         for obs in all_trades[pair]:
             # Validation checks -- only processing USD
@@ -150,16 +195,7 @@ def parse_events():
         if len(all_trades[pair]) == 0:
             continue
 
-        # Only handle 3 char coins for now
-        assert len(pair) == 6
-        base_currency = pair[:3]
-        quote_currency = pair[3:]
-
-        # Handle differing Bitcoin Cash symbols
-        if base_currency == "BCC":
-            base_currency = "BCH"
-        if quote_currency == "BCC":
-            quote_currency = "BCH"
+        base_currency, quote_currency = _parse_pair(pair)
 
         for obs in all_trades[pair]:
             if obs["type"] == "Buy":
