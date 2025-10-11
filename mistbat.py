@@ -11,6 +11,7 @@ from transactions import (
     annotate_transactions,
     fmv_transactions,
     imply_fees,
+    Earn,
 )
 from tax import Form8949
 
@@ -201,9 +202,15 @@ def updatefmv(verbose):
 #     default=False,
 # )
 # @click.option(
-#     "--year", help="Limit report to a particular year", is_flag=False, default=None
+#     "--year", help="Limit report to a particular year", is_flag=False, default=None,
 # )
-def tax(aggregated, year):
+# @click.option(
+#     "--method",
+#     help="Sets the accounting method.  Options are FIFO and HIFO.  Uses FIFO if not specified.",
+#     is_flag=False,
+#     default="FIFO"
+# )
+def tax(aggregated, year, method):
     """Generate the information needed for IRS Form 8949"""
     events = get_events(loaders.all)
     transactions = get_transactions(events, XDG_CONFIG_HOME + "/mistbat/tx_match.yaml")
@@ -215,7 +222,15 @@ def tax(aggregated, year):
     )
     transactions = imply_fees(transactions)
 
-    form_8949 = Form8949(transactions)
+    if method == "HIFO":
+        if aggregated:
+            aggregated = False
+            print(f"Aggrated is not compatible w/ HIFO accounting style.")
+        form_8949 = Form8949(transactions, "HIFO")
+    elif method == "FIFO":
+        form_8949 = Form8949(transactions, "FIFO")
+    else:
+        raise RuntimeError(f"Invalid accounting method specified.")
 
     print("SHORT-TERM CAPITAL GAINS")
     table = PrettyTable(
@@ -263,7 +278,13 @@ def tax(aggregated, year):
 #     is_flag=True,
 #     default=False,
 # )
-def currentbasis(harvest):
+# @click.option(
+#     "--method",
+#     help="Sets the accounting method.  Options are FIFO and HIFO.  Uses FIFO if not specified.",
+#     is_flag=False,
+#     default="FIFO"
+# )
+def currentbasis(harvest, method):
     """See available basis by coin"""
     events = get_events(loaders.all)
     transactions = get_transactions(events, XDG_CONFIG_HOME + "/mistbat/tx_match.yaml")
@@ -275,7 +296,13 @@ def currentbasis(harvest):
     )
     transactions = imply_fees(transactions)
 
-    form_8949 = Form8949(transactions)
+    if method == "HIFO":
+        form_8949 = Form8949(transactions, "HIFO")
+    elif method == "FIFO":
+        form_8949 = Form8949(transactions, "FIFO")
+    else:
+        raise RuntimeError(f"Invalid accounting method specified.")
+
     print("\nAVAILABLE BASIS REPORT")
     print(
         "Note: Coin totals will slighly deviate from 'holdings' since SENDRECV fees do not impact basis.\n"
@@ -315,6 +342,58 @@ def currentbasis(harvest):
             row.append("")
         table.add_row(row)
         table.add_row([" "] * len(table.field_names))
+    print(table)
+
+
+# @cli.command()
+def yearlyincome():
+    """Summarizes the fair market value of all EARN transaction types for each coin type per year"""
+
+    """load everything"""
+    events = get_events(loaders.all)
+    transactions = get_transactions(events, XDG_CONFIG_HOME + "/mistbat/tx_match.yaml")
+    transactions = annotate_transactions(
+        transactions, XDG_CONFIG_HOME + "/mistbat/tx_annotations.yaml"
+    )
+    transactions = fmv_transactions(
+        transactions, XDG_DATA_HOME + "/mistbat/tx_fmv.yaml"
+    )
+    transactions = imply_fees(transactions)
+    income_transactions = []
+    for t in transactions:
+        if isinstance(t, Earn):
+            income_transactions.append(t)
+    # get the list of years
+    transaction_years = [t.time.year for t in income_transactions]
+    year_list = list(set(transaction_years))
+    # get list of coins
+    transaction_coins = [t.coin for t in income_transactions]
+    coin_list = list(set(transaction_coins))
+
+    print("\nYearly Income")
+    print(
+        "Note: This lists totals income for each coin, NOT GAINS.  This assumes you are being paid in a coin."
+    )
+    table_headings = ["Coin"] + [str(y) for y in year_list]
+    table = PrettyTable(table_headings)
+
+    for coin in coin_list:
+        totals = []
+        for y in year_list:
+            # search through all the income_transactions for this coin and year
+            coin_amount = [
+                t.amount
+                for t in income_transactions
+                if ((t.coin == coin) and (t.time.year == y))
+            ]
+            coin_usd = [
+                t.fmv * t.amount
+                for t in income_transactions
+                if ((t.coin == coin) and (t.time.year == y))
+            ]
+            totals.append(f"{sum(coin_amount)}==>${sum(coin_usd):.2f}")
+        row = [coin] + totals
+        table.add_row(row)
     print(table)
 
 
@@ -432,6 +511,8 @@ def remoteupdate(exchange):
         loaders.ledger_csv.update_from_remote()
     elif exchange == "gemini":
         loaders.gemini.update_from_remote()
+    elif exchange == "cudominer_json":
+        loaders.cudominer_json.update_from_remote()
     else:
         print("Bad exchange specified.")
 
