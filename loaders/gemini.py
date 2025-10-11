@@ -18,7 +18,7 @@ def update_from_remote():
     all_pairs = pub_client.symbols()    # pairs are lower case in the exchange
 
     # Open the private client to Gemini.
-    keys = yaml.load(open(XDG_CONFIG_HOME + "/mistbat/secrets.yaml"))["gemini"]
+    keys = yaml.load(open(XDG_CONFIG_HOME + "/config/secrets.yaml"))["gemini"]
     pvt_client = PrivateClient(keys["api_key"], keys["secret_key"])
 
     #read all transfers to/from Gemini
