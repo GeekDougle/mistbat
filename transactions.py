@@ -482,7 +482,10 @@ def fmv_transactions(transactions, tx_fmv_file):
             fmvs = fmv_data[tx.id]
         except KeyError:
             raise RuntimeError(f"{tx.id} missing fmv information. Run updatefmv?")
-        fmvs.pop("comment")
+        try:
+                fmvs.pop("comment")
+        except KeyError:
+            print(f"Transaction {tx.id} is missing a comment in the fair market value (fmv) file.  This may not be an issue...")
 
         if hasattr(tx, "coin"):
             tx.fmv = float(fmvs[tx.coin])

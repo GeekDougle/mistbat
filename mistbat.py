@@ -208,7 +208,6 @@ def updatefmv(verbose):
     # Fill remaining missing transactions with public closing price
     print(f"{len(missing)} missing transactions")
     for tx in progressBar(missing, prefix = 'Progress:', suffix = 'Complete', length = 50):
-        print(f"{tx.id}") 
         fmv_data[tx.id] = {"comment": "from crytpocompare daily close api"}
         for coin in tx.affected_coins:
             coin_fmv = get_historical_close(coin, int(tx.time.timestamp()))

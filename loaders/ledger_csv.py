@@ -9,7 +9,9 @@ data_file_path = XDG_DATA_HOME + "/mistbat/ledger_csv_import.json"
 
 def update_from_remote():
     """Look for files in XDG_DATA_HOME with the format "ledgerlive-operations*.csv".  Look for 
-    duplicate transaction ids and throw a warning."""
+    duplicate transaction ids and throw a warning.
+    BOND, DELEGATE, UNDELEGATE transactions are ignored.
+    """
     import glob
     import csv
 
@@ -25,10 +27,16 @@ def update_from_remote():
             transactions.extend(csv.DictReader(csvfile))
     print(f'Found {len(transactions)} Ledger observations.')
 
+    unique_transactions = []
+    for d in transactions:
+        if d not in unique_transactions:
+            unique_transactions.append(d)
+    print(f'Found {len(unique_transactions)} Unique Ledger observations.')
+
     #check for duplicate transaction hashes
     seen = set()
     duplicate = []  #list of indecies of duplicates
-    op_hash_list = [t['Operation Hash'] for t in transactions]
+    op_hash_list = [t['Operation Hash'] for t in unique_transactions]
     for i, x in enumerate(op_hash_list):
         if x not in seen:
             seen.add(x)
@@ -36,21 +44,21 @@ def update_from_remote():
             print(f'Possible Duplicate found. Operation Hash: {x}')
             #TODO: Handle multiple duplicate instances
             #find previous instance of this transaction hash
-            prev_instance = transactions[op_hash_list.index()]
-            if (prev_instance['Operation Date'] != transactions[i]['Operation Date']) or prev_instance['Account xpub'] != transactions[i]['Account xpub']:
+            prev_instance = unique_transactions[op_hash_list.index()]
+            if (prev_instance['Operation Date'] != unique_transactions[i]['Operation Date']) or prev_instance['Account xpub'] != transactions[i]['Account xpub']:
                 warnings.warn('Non Matching Duplicate Ledger Operation Hash: {}'.format(x))
             else:
                 duplicate.add(i)
     #remove the duplicates from the transaction list
     if len(duplicate) >0:
         for x in duplicate:
-            del transactions[x]
+            del unique_transactions[x]
         print(f'{len(duplicate)} duplicate transactions deleted.')
         
     #Get deposits and withdrawals
-    deposits = [t for t in transactions if t['Operation Type'] == 'IN']
+    deposits = [t for t in unique_transactions if t['Operation Type'] in ('IN', 'REWARD_PAYOUT')]
     print(f"{len(deposits)} deposit transactions imported.")
-    withdraws = [t for t in transactions if t['Operation Type'] == 'OUT']
+    withdraws = [t for t in unique_transactions if t['Operation Type'] in ('OUT')]
     print(f"{len(withdraws)} withdrawal transactions imported.")
     b_resources = {"deposits": deposits, "withdraws": withdraws}
 

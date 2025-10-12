@@ -8,6 +8,8 @@ data_file_path = XDG_DATA_HOME + "/mistbat/gemini.json"
 
 USE_SANDBOX = True
 
+DEPRECATED_PAIRS_TO_QUERY = ('audiousd',)        #TODO: Change this to a config file.
+
 # Print iterations progress
 def progressBar(iterable, prefix = '', suffix = '', decimals = 1, length = 100, fill = '█', printEnd = "\r"):
     """
@@ -70,6 +72,8 @@ def update_from_remote():
     # open a public client and retrive the list of symbols and convert to upper case
     pub_client = PublicClient(sandbox=USE_SANDBOX)
     all_pairs = pub_client.symbols()    # pairs are lower case in the exchange
+    for p in DEPRECATED_PAIRS_TO_QUERY:
+        all_pairs.append(p)
 
     # Open the private client to Gemini.
     keys = yaml.load(open(XDG_CONFIG_HOME + "/mistbat/secrets.yaml"))["gemini"]
@@ -78,9 +82,16 @@ def update_from_remote():
     #read all transfers to/from Gemini
     transfers = pvt_client.get_past_transfers()
     print(f"Retrieved {len(transfers)} transfers.")
+    assert len(transfers) < 500  #TODO update script to handle >500 trades
+    
+    #filtering out fiat money transfers into Gemini, since that is not a taxable event.
     deposits = [t for t in transfers if (t['type'] == "Deposit") and (t['currency'] != "USD")]
     withdraws = [t for t in transfers if (t['type'] == "Withdrawal") and (t['status'] != "Advanced")]
     print(f"Accepted {len(deposits)} deposits and {len(withdraws)} withdrawals.")
+    rejected_transfers = [t for t in transfers if (t not in deposits) and (t not in withdraws)]
+    print(f"The following {len(rejected_transfers)} transactions weren't accepted:")
+    for rt in rejected_transfers:
+        print(rt)
 
     b_resources = {"deposits": deposits, "withdraws": withdraws}
 

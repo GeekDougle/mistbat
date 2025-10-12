@@ -24,10 +24,16 @@ def update_from_remote():
             transactions.extend(json.load(csvfile))
     print(f'Found {len(transactions)} CudoMiner observations.')
 
+    unique_transactions = []
+    for d in transactions:
+        if d not in unique_transactions:
+            unique_transactions.append(d)
+    print(f'Found {len(unique_transactions)} Unique CudoMiner observations.')
+
     #Get deposits and withdrawals
-    deposits = [t for t in transactions if t['category'] == 'revenue']
+    deposits = [t for t in unique_transactions if t['category'] == 'revenue']
     print(f"{len(deposits)} deposit transactions imported.")
-    withdraws = [t for t in transactions if ((t['category'] == 'user-withdrawal') or (t['category'] == 'balance-transfer'))]
+    withdraws = [t for t in unique_transactions if ((t['category'] == 'user-withdrawal') or (t['category'] == 'balance-transfer'))]
     print(f"{len(withdraws)} withdrawal transactions imported.")
     b_resources = {"deposits": deposits, "withdraws": withdraws}
 
