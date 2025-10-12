@@ -76,7 +76,18 @@ class Exchange(Event):
             self.buy_coin,
             self.buy_amount,
         )
-
+    
+    def __iter__(self):
+        # 
+        self.data_to_iter = (self.time.strftime("%Y-%m-%d %H:%M:%S"),"Exchange",
+            self.id,
+            self.sell_coin,
+            self.sell_amount,
+            self.buy_coin,
+            self.buy_amount,        
+            )
+        for item in self.data_to_iter:
+            yield item
 
 class FiatExchange(Exchange):
     def __init__(self, **kwargs):
@@ -122,7 +133,35 @@ class FiatExchange(Exchange):
                 self.rate,
                 self.sell_coin,
             )
-
+        
+    def __iter__(self):
+        # 
+        if self.investing:
+            self.data_to_iter= (
+                self.time.strftime("%Y-%m-%d %H:%M:%S"),"FiatExchange-investing",
+                self.id,
+                self.sell_coin,
+                self.sell_amount,
+                self.fee_amount,
+                self.buy_coin,
+                self.buy_amount,
+                self.rate,
+                self.buy_coin,
+            )
+        else:
+            self.data_to_iter = (
+                self.time.strftime("%Y-%m-%d %H:%M:%S"),"FiatExchange",
+                self.id,
+                self.sell_coin,
+                self.sell_amount,
+                self.buy_coin,
+                self.buy_amount,
+                self.fee_amount,
+                self.rate,
+                self.sell_coin,
+            )
+        for item in self.data_to_iter:
+            yield item
 
 class Send(Event):
     def entries(self):
@@ -136,7 +175,17 @@ class Send(Event):
             self.amount,
             self.location,
         )
-
+    def __iter__(self):
+        # 
+        self.data_to_iter = (
+            self.time.strftime("%Y-%m-%d %H:%M:%S"), "Send",
+            self.id,
+            self.coin,
+            self.amount,
+            self.location,
+        )
+        for item in self.data_to_iter:
+            yield item
 
 class Receive(Event):
     def entries(self):
@@ -150,7 +199,17 @@ class Receive(Event):
             self.amount,
             self.location,
         )
-
+    def __iter__(self):
+        # 
+        self.data_to_iter = (
+            self.time.strftime("%Y-%m-%d %H:%M:%S"), "Receive",
+            self.id,
+            self.coin,
+            self.amount,
+            self.location,
+        )
+        for item in self.data_to_iter:
+            yield item
 
 def get_events(loaders, typ=None, remote_update=False):
     """Return events from exchange loaders.
