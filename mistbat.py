@@ -535,7 +535,7 @@ def holdings(aggregated):
 
 # @cli.command()
 # @click.argument("exchange")
-def remoteupdate(exchange):
+def remoteupdate(exchange, pairs = None):
     """Fetch updated coinbase information from remote"""
     if exchange == "coinbase":
         loaders.coinbase.update_from_remote()
@@ -546,7 +546,7 @@ def remoteupdate(exchange):
     elif exchange == "ledger_csv":
         loaders.ledger_csv.update_from_remote()
     elif exchange == "gemini":
-        loaders.gemini.update_from_remote()
+        loaders.gemini.update_from_remote(pairs= pairs)
     elif exchange == "cudominer_json":
         loaders.cudominer_json.update_from_remote()
     else:

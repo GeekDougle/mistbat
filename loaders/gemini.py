@@ -2,6 +2,7 @@ import json
 from events import *
 from xdg import XDG_DATA_HOME, XDG_CONFIG_HOME
 import time
+from datetime import datetime
 
 #location where the imported data should be stored
 data_file_path = XDG_DATA_HOME + "/mistbat/gemini.json"
@@ -64,7 +65,7 @@ def _parse_pair(pair_str):
     return(base_currency, quote_currency)
 
 
-def update_from_remote():
+def update_from_remote(pairs:list = None):
     """Poll the gemini API for transfer history and trade history and save as json file."""
     from gemini import PrivateClient, PublicClient
     import yaml
@@ -75,6 +76,16 @@ def update_from_remote():
     for p in DEPRECATED_PAIRS_TO_QUERY:
         all_pairs.append(p)
 
+    # if pairs is passed in, verify they are all valid
+    if pairs is not None:
+        reduced_pairs = []
+        for p in pairs:
+            if p in all_pairs:
+                reduced_pairs.append(p)
+            else:
+                print(f("Pair not recognized by Gemini passed in: {p}"))
+        all_pairs = reduced_pairs
+
     # Open the private client to Gemini.
     keys = yaml.load(open(XDG_CONFIG_HOME + "/mistbat/secrets.yaml"))["gemini"]
     pvt_client = PrivateClient(keys["api_key"], keys["secret_key"])
@@ -83,7 +94,7 @@ def update_from_remote():
     transfers = pvt_client.get_past_transfers()
     print(f"Retrieved {len(transfers)} transfers.")
     assert len(transfers) < 500  #TODO update script to handle >500 trades
-    
+
     #filtering out fiat money transfers into Gemini, since that is not a taxable event.
     deposits = [t for t in transfers if (t['type'] == "Deposit") and (t['currency'] != "USD")]
     withdraws = [t for t in transfers if (t['type'] == "Withdrawal") and (t['status'] != "Advanced")]
@@ -94,6 +105,20 @@ def update_from_remote():
         print(rt)
 
     b_resources = {"deposits": deposits, "withdraws": withdraws}
+
+    # #read all staking events
+    # staking_events = pvt_client.get_staking_history()
+    # print(f"Retrieved {len(staking_events)} staking events.")
+    # for s in staking_events:
+    #     print(s)
+    # assert len(staking_events) < 500  #TODO update script to handle >500 trades
+
+    # #read all staking rewards
+    # staking_rewards = pvt_client.get_staking_rewards()
+    # print(f"Retrieved {len(staking_rewards)} staking reward events.")
+    # for s in staking_rewards:
+    #     print(s)
+    # assert len(staking_rewards) < 500  #TODO update script to handle >500 trades
 
     trades = {}
     print(f"Total pairs to loop through: {len(all_pairs)}")
