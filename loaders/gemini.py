@@ -23,20 +23,21 @@ def progressBar(iterable, prefix = '', suffix = '', decimals = 1, length = 100, 
     from https://stackoverflow.com/questions/3173320/text-progress-bar-in-terminal-with-block-characters
     """
     total = len(iterable)
-    # Progress Bar Printing Function
-    def printProgressBar (iteration):
-        percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
-        filledLength = int(length * iteration // total)
-        bar = fill * filledLength + '-' * (length - filledLength)
-        print(f'\r{prefix} |{bar}| {percent}% {suffix}', end = printEnd)
-    # Initial Call
-    printProgressBar(0)
-    # Update Progress Bar
-    for i, item in enumerate(iterable):
-        yield item
-        printProgressBar(i + 1)
-    # Print New Line on Complete
-    print()
+    if total >0:
+        # Progress Bar Printing Function
+        def printProgressBar (iteration):
+            percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
+            filledLength = int(length * iteration // total)
+            bar = fill * filledLength + '-' * (length - filledLength)
+            print(f'\r{prefix} |{bar}| {percent}% {suffix}', end = printEnd)
+        # Initial Call
+        printProgressBar(0)
+        # Update Progress Bar
+        for i, item in enumerate(iterable):
+            yield item
+            printProgressBar(i + 1)
+        # Print New Line on Complete
+        print()
 
 def _parse_pair(pair_str):
     '''Parses the pair string into the quote currency (first symbol) and the base currency (2nd symbol)'''

@@ -2,6 +2,7 @@ import click
 import time
 import loaders
 import yaml
+import csv
 from prettytable import PrettyTable
 from xdg import XDG_CONFIG_HOME, XDG_DATA_HOME
 from cryptocompare import get_historical_close, get_coin_spot_prices
@@ -14,6 +15,37 @@ from transactions import (
     Earn,
 )
 from tax import Form8949
+
+# Print iterations progress
+def progressBar(iterable, prefix = '', suffix = '', decimals = 1, length = 100, fill = '█', printEnd = "\r"):
+    """
+    Call in a loop to create terminal progress bar
+    @params:
+        iterable    - Required  : iterable object (Iterable)
+        prefix      - Optional  : prefix string (Str)
+        suffix      - Optional  : suffix string (Str)
+        decimals    - Optional  : positive number of decimals in percent complete (Int)
+        length      - Optional  : character length of bar (Int)
+        fill        - Optional  : bar fill character (Str)
+        printEnd    - Optional  : end character (e.g. "\r", "\r\n") (Str)
+    from https://stackoverflow.com/questions/3173320/text-progress-bar-in-terminal-with-block-characters
+    """
+    total = len(iterable)
+    if total >0:
+        # Progress Bar Printing Function
+        def printProgressBar (iteration):
+            percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
+            filledLength = int(length * iteration // total)
+            bar = fill * filledLength + '-' * (length - filledLength)
+            print(f'\r{prefix} |{bar}| {percent}% {suffix}', end = printEnd)
+        # Initial Call
+        printProgressBar(0)
+        # Update Progress Bar
+        for i, item in enumerate(iterable):
+            yield item
+            printProgressBar(i + 1)
+        # Print New Line on Complete
+        print()
 
 
 def print_usd_exposure():
@@ -44,12 +76,17 @@ def cli():
 #     is_flag=True,
 #     default=False,
 # )
-def lsev(remote_update):
+def lsev(remote_update, data_file_path=None):
     """List all events parsed from observations."""
     events = get_events(loaders.all, remote_update=remote_update)
-    for ev in events:
-        print(ev)
-
+    if data_file_path == None:
+        for ev in events:
+            print(ev)
+    else:
+        print(f"Saving event list to file: {data_file_path}")
+        with open(data_file_path, "w") as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerows(events)
     print("--------------------")
     print("{} total events".format(len(events)))
     print_usd_exposure()
@@ -169,9 +206,9 @@ def updatefmv(verbose):
         )
 
     # Fill remaining missing transactions with public closing price
-    print(f"{len(missing)} missing transactions") if verbose else None
-    for tx in missing:
-        print(f"{tx.id}")
+    print(f"{len(missing)} missing transactions")
+    for tx in progressBar(missing, prefix = 'Progress:', suffix = 'Complete', length = 50):
+        print(f"{tx.id}") 
         fmv_data[tx.id] = {"comment": "from crytpocompare daily close api"}
         for coin in tx.affected_coins:
             coin_fmv = get_historical_close(coin, int(tx.time.timestamp()))
