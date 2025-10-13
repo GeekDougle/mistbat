@@ -3,6 +3,7 @@ import time
 import loaders
 import yaml
 import csv
+from datetime import datetime
 from prettytable import PrettyTable
 from xdg import XDG_CONFIG_HOME, XDG_DATA_HOME
 from cryptocompare import get_historical_close, get_coin_spot_prices
@@ -246,7 +247,7 @@ def updatefmv(verbose):
 #     is_flag=False,
 #     default="FIFO"
 # )
-def tax(aggregated, year, method):
+def tax(aggregated, year, method, output_csv_file = True):
     """Generate the information needed for IRS Form 8949"""
     events = get_events(loaders.all)
     transactions = get_transactions(events, XDG_CONFIG_HOME + "/mistbat/tx_match.yaml")
@@ -280,12 +281,20 @@ def tax(aggregated, year, method):
         ]
     )
     total_gain = 0.00
-    for line in form_8949.generate_form(term="short", aggregated=aggregated, year=year):
+    form_lines = form_8949.generate_form(term="short", aggregated=aggregated, year=year)
+    for line in form_lines:
         table.add_row(line)
         if str(line[-1]).strip():
             total_gain += line[-1]
     print(table)
     print(f"TOTAL SHORT-TERM CAPITAL GAIN: USD {total_gain:0.2f}")
+    if output_csv_file:
+        filename = f"/Tax Year {year} FORM8949-{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}.csv"
+        with open(XDG_DATA_HOME+filename, "w") as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerow(f"{year} SHORT-TERM CAPITAL GAINS")
+            writer.writerows(form_lines)
+            writer.writerow(f"TOTAL SHORT-TERM CAPITAL GAIN (USD):,{total_gain:0.2f}")
 
     print("\nLONG-TERM CAPITAL GAINS")
     table = PrettyTable(
@@ -299,13 +308,19 @@ def tax(aggregated, year, method):
         ]
     )
     total_gain = 0.00
-    for line in form_8949.generate_form(term="long", aggregated=aggregated, year=year):
+    form_lines = form_8949.generate_form(term="long", aggregated=aggregated, year=year)
+    for line in form_lines:
         table.add_row(line)
         if str(line[-1]).strip():
             total_gain += line[-1]
     print(table)
     print(f"TOTAL LONG-TERM CAPITAL GAIN: USD {total_gain:0.2f}")
-
+    if output_csv_file:
+        with open(XDG_DATA_HOME+filename, "a") as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerow(f"{year} LONG-TERM CAPITAL GAINS")
+            writer.writerows(form_lines)
+            writer.writerow(f"TOTAL LONG-TERM CAPITAL GAIN (USD):,{total_gain:0.2f}")
 
 # @cli.command()
 # @click.option(
