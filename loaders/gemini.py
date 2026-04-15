@@ -10,6 +10,7 @@ data_file_path = XDG_DATA_HOME + "/mistbat/gemini.json"
 USE_SANDBOX = True
 
 DEPRECATED_PAIRS_TO_QUERY = ('audiousd',)        #TODO: Change this to a config file.
+LIMIT_TRANSFERS = 10000             #Was hard coded to 500, changing to an option which is set here.  Need >500, but don't know what the upper limit is.
 
 # Print iterations progress
 def progressBar(iterable, prefix = '', suffix = '', decimals = 1, length = 100, fill = '█', printEnd = "\r"):
@@ -83,7 +84,7 @@ def update_from_remote(pairs:list = None):
             if p in all_pairs:
                 reduced_pairs.append(p)
             else:
-                print(f("Pair not recognized by Gemini passed in: {p}"))
+                print(f"Pair not recognized by Gemini passed in: {p}")
         all_pairs = reduced_pairs
 
     # Open the private client to Gemini.
@@ -91,9 +92,8 @@ def update_from_remote(pairs:list = None):
     pvt_client = PrivateClient(keys["api_key"], keys["secret_key"])
 
     #read all transfers to/from Gemini
-    transfers = pvt_client.get_past_transfers()
+    transfers = pvt_client.get_past_transfers(limit_transfers=LIMIT_TRANSFERS)
     print(f"Retrieved {len(transfers)} transfers.")
-    assert len(transfers) < 500  #TODO update script to handle >500 trades
 
     #filtering out fiat money transfers into Gemini, since that is not a taxable event.
     deposits = [t for t in transfers if (t['type'] == "Deposit") and (t['currency'] != "USD")]
@@ -107,31 +107,41 @@ def update_from_remote(pairs:list = None):
     b_resources = {"deposits": deposits, "withdraws": withdraws}
 
     # #read all staking events
-    # staking_events = pvt_client.get_staking_history()
-    # print(f"Retrieved {len(staking_events)} staking events.")
+    #staking_events = pvt_client.get_staking_history(limit_transfers=LIMIT_TRANSFERS)
+    #print(f"Retrieved {len(staking_events[0]['transactions'])} staking events.")
     # for s in staking_events:
     #     print(s)
-    # assert len(staking_events) < 500  #TODO update script to handle >500 trades
 
     # #read all staking rewards
-    # staking_rewards = pvt_client.get_staking_rewards()
-    # print(f"Retrieved {len(staking_rewards)} staking reward events.")
+    staking_events = pvt_client.get_staking_history(limit_transfers=LIMIT_TRANSFERS)
+    for provider in staking_events:
+        print(f"Retrieved {len(provider['transactions'])} staking reward events from {provider['providerId']}.")
+        for event in provider['transactions']:
+            txn = {"timestampms":event['dateTime'], 
+                   "currency":event['amountCurrency'], 
+                   "amount":event['amount'],
+                   "txType": event['transactionType']
+                   }
+            if event['transactionType'] in ['Interest', 'Deposit']:
+                b_resources['deposits'].append(txn)
+            elif event['transactionType'] in ['Redeem']:
+                b_resources['withdraws'].append(txn)
+            else:
+                print(event)
+            
     # for s in staking_rewards:
     #     print(s)
-    # assert len(staking_rewards) < 500  #TODO update script to handle >500 trades
 
     trades = {}
     print(f"Total pairs to loop through: {len(all_pairs)}")
     for pair in progressBar(all_pairs, prefix = 'Progress:', suffix = 'Complete', length = 50):
         try:
             # convert pair to upper case
-            trades[pair.upper()] = pvt_client.get_past_trades(symbol=pair)
+            trades[pair.upper()] = pvt_client.get_past_trades(symbol=pair, limit_trades=LIMIT_TRANSFERS)
         except:
             print("API limit exceeded. Pausing for 5 seconds.")
             time.sleep(5)
-            trades[pair.upper()] = pvt_client.get_past_trades(symbol=pair)
-                # 500 trades max per pair
-        assert len(trades[pair.upper()]) < 500  #TODO update script to handle >500 trades
+            trades[pair.upper()] = pvt_client.get_past_trades(symbol=pair, limit_trades=LIMIT_TRANSFERS)
         #if gemini returns an error when pulling trades, drop the pair, but print a message
         if 'result' in trades[pair.upper()]:
             print(f"Error received from Gemini: {trades[pair.upper()]}")
@@ -140,6 +150,7 @@ def update_from_remote(pairs:list = None):
 
     b_resources["trades"] = trades
 
+    print(f'Writing Gemini Data to {data_file_path}...')
     with open(data_file_path, "w") as f:
         f.write(json.dumps(b_resources, indent=2))
 
@@ -161,14 +172,24 @@ def parse_events():
         # Handle differing Bitcoin Cash symbols
         if obs["currency"] == "BCC":
             obs["currency"] = "BCH"
-
-        receive = Receive(
-            time=obs["timestampms"],
-            location="gemini",
-            coin=obs["currency"],
-            amount=float(obs["amount"]),
-            txid=obs["txHash"],
-        )
+        try:
+            temp_var= obs["txHash"]
+        except KeyError:
+            #staking transactions don't have a hash...
+            receive = Receive(
+                time=obs["timestampms"],
+                location="gemini",
+                coin=obs["currency"],
+                amount=float(obs["amount"]),
+            )
+        else:
+            receive = Receive(
+                time=obs["timestampms"],
+                location="gemini",
+                coin=obs["currency"],
+                amount=float(obs["amount"]),
+                txid=obs["txHash"],
+            )
         events.append(receive)
 
     for obs in json_data["withdraws"]:
@@ -176,13 +197,25 @@ def parse_events():
         if obs["currency"] == "BCC":
             obs["currency"] = "BCH"
 
-        send = Send(
-            time=obs["timestampms"],
-            location="gemini",
-            coin=obs["currency"],
-            amount=float(obs["amount"]),
-            txid=obs["txHash"],
-        )
+        try:
+            temp_var= obs["txHash"]
+        except KeyError:
+            # some Gemini withdrawals don't have a txHash.  Seems like maybe internal transfers?
+            send = Send(
+                time=obs["timestampms"],
+                location="gemini",
+                coin=obs["currency"],
+                amount=float(obs["amount"]),
+                txid=obs["transferId"],
+            )
+        else:
+            send = Send(
+                time=obs["timestampms"],
+                location="gemini",
+                coin=obs["currency"],
+                amount=float(obs["amount"]),
+                txid=obs["txHash"],
+            )
         events.append(send)
 
     all_trades = json_data["trades"]
