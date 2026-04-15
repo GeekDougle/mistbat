@@ -2,6 +2,9 @@ import json
 from events import *
 from xdg import XDG_DATA_HOME, XDG_CONFIG_HOME
 import time
+import logging
+
+logger = logging.getLogger(__name__)
 
 #location where the imported data should be stored
 data_file_path = XDG_DATA_HOME + "/mistbat/cudominer.json"
@@ -13,32 +16,32 @@ def update_from_remote():
     import glob
 
     #find files which match the format we expect.
-    print(f'Reading Cudo Miner files from {XDG_DATA_HOME}')
+    logger.info(f'Reading Cudo Miner files from {XDG_DATA_HOME}')
     filenames = glob.glob(XDG_DATA_HOME+"/cudo_transactions*.json")
-    print(f'Found {len(filenames)} Cudo Miner files.')
+    logger.info(f'Found {len(filenames)} Cudo Miner files.')
     
     #read in the data from all the files found
     transactions = []
     for f in filenames:
         with open(f, newline='') as csvfile:
             transactions.extend(json.load(csvfile))
-    print(f'Found {len(transactions)} CudoMiner observations.')
+    logger.info(f'Found {len(transactions)} CudoMiner observations.')
 
     unique_transactions = []
     for d in transactions:
         if d not in unique_transactions:
             unique_transactions.append(d)
-    print(f'Found {len(unique_transactions)} Unique CudoMiner observations.')
+    logger.info(f'Found {len(unique_transactions)} Unique CudoMiner observations.')
 
     #Get deposits and withdrawals
     deposits = [t for t in unique_transactions if t['category'] == 'revenue']
-    print(f"{len(deposits)} deposit transactions imported.")
+    logger.info(f"{len(deposits)} deposit transactions imported.")
     withdraws = [t for t in unique_transactions if ((t['category'] == 'user-withdrawal') or (t['category'] == 'balance-transfer'))]
-    print(f"{len(withdraws)} withdrawal transactions imported.")
+    logger.info(f"{len(withdraws)} withdrawal transactions imported.")
     b_resources = {"deposits": deposits, "withdraws": withdraws}
 
     #write the file out
-    print(f'Writing Cudo Miner Data to {data_file_path}...')
+    logger.debug(f'Writing Cudo Miner Data to {data_file_path}...')
     with open(data_file_path, "w") as f:
         f.write(json.dumps(b_resources, indent=2))
 

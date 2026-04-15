@@ -3,6 +3,9 @@ from events import *
 from xdg import XDG_DATA_HOME, XDG_CONFIG_HOME
 import time
 import warnings
+import logging
+
+logger = logging.getLogger(__name__)
 
 #location where the imported data should be stored
 data_file_path = XDG_DATA_HOME + "/mistbat/ledger_csv_import.json"
@@ -16,22 +19,22 @@ def update_from_remote():
     import csv
 
     #find files which match the format we expect.
-    print(f'Reading Ledger files from {XDG_DATA_HOME}')
+    logger.info(f'Reading Ledger files from {XDG_DATA_HOME}')
     filenames = glob.glob(XDG_DATA_HOME+"/ledgerlive-operations*.csv")
-    print(f'Found {len(filenames)} Ledger files.')
+    logger.info(f'Found {len(filenames)} Ledger files.')
     
     #read in the data from all the files found
     transactions = []
     for f in filenames:
         with open(f, newline='') as csvfile:
             transactions.extend(csv.DictReader(csvfile))
-    print(f'Found {len(transactions)} Ledger observations.')
+    logger.info(f'Found {len(transactions)} Ledger observations.')
 
     unique_transactions = []
     for d in transactions:
         if d not in unique_transactions:
             unique_transactions.append(d)
-    print(f'Found {len(unique_transactions)} Unique Ledger observations.')
+    logger.info(f'Found {len(unique_transactions)} Unique Ledger observations.')
 
     #check for duplicate transaction hashes
     seen = set()
@@ -41,7 +44,7 @@ def update_from_remote():
         if x not in seen:
             seen.add(x)
         else:
-            print(f'Possible Duplicate found. Operation Hash: {x}')
+            logger.warning(f'Possible Duplicate found. Operation Hash: {x}')
             #TODO: Handle multiple duplicate instances
             #find previous instance of this transaction hash
             prev_instance = unique_transactions[op_hash_list.index()]
@@ -53,17 +56,17 @@ def update_from_remote():
     if len(duplicate) >0:
         for x in duplicate:
             del unique_transactions[x]
-        print(f'{len(duplicate)} duplicate transactions deleted.')
+        logger.info(f'{len(duplicate)} duplicate transactions deleted.')
         
     #Get deposits and withdrawals
     deposits = [t for t in unique_transactions if t['Operation Type'] in ('IN', 'REWARD_PAYOUT')]
-    print(f"{len(deposits)} deposit transactions imported.")
+    logger.info(f"{len(deposits)} deposit transactions imported.")
     withdraws = [t for t in unique_transactions if t['Operation Type'] in ('OUT')]
-    print(f"{len(withdraws)} withdrawal transactions imported.")
+    logger.info(f"{len(withdraws)} withdrawal transactions imported.")
     b_resources = {"deposits": deposits, "withdraws": withdraws}
 
     #write the file out
-    print(f'Writing Ledger Data to {data_file_path}...')
+    logger.debug(f'Writing Ledger Data to {data_file_path}...')
     with open(data_file_path, "w") as f:
         f.write(json.dumps(b_resources, indent=2))
 

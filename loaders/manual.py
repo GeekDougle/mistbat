@@ -1,6 +1,9 @@
 import yaml
 from events import *
 from xdg import XDG_CONFIG_HOME
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def update_from_remote():
@@ -16,6 +19,7 @@ def parse_events():
         observations = yaml.load(f)
 
     if observations != None:
+        logger.info(f"Retrieved {len(observations)} manual transactions.")
         for obs in observations:
             if obs["type"] == "exchange":
                 exchange = Exchange(
@@ -68,6 +72,6 @@ def parse_events():
             else:
                 raise Exception("Unrecognized type: " + obs["type"])
     else:
-        print("No manual observations imported.")
+        logger.info("No manual observations imported.")
 
     return events

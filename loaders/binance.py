@@ -2,6 +2,9 @@ import json
 from events import *
 from xdg import XDG_DATA_HOME, XDG_CONFIG_HOME
 import time
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def update_from_remote():
@@ -20,14 +23,14 @@ def update_from_remote():
     all_pairs = [sym["symbol"] for sym in exchange_info["symbols"]]
 
     trades = {}
-    print(f"Total pairs to loop through: {len(all_pairs)}")
+    logger.info(f"Total pairs to loop through: {len(all_pairs)}")
     for index, pair in enumerate(all_pairs):
         if index % 10 == 0:
-            print(f"Currently: {index}")
+            logger.debug(f"Currently: {index}")
         try:
             trades[pair] = client.get_my_trades(symbol=pair)
         except:
-            print("API limit exceeded. Pausing for 60 seconds.")
+            logger.warning("API limit exceeded. Pausing for 60 seconds.")
             time.sleep(61)
             trades[pair] = client.get_my_trades(symbol=pair)
             

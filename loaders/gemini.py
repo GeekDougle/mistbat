@@ -3,6 +3,15 @@ from events import *
 from xdg import XDG_DATA_HOME, XDG_CONFIG_HOME
 import time
 from datetime import datetime
+import logging
+import sys
+import os
+
+# Add parent directories to path to import logging_config
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+from logging_config import progressBar
+
+logger = logging.getLogger(__name__)
 
 #location where the imported data should be stored
 data_file_path = XDG_DATA_HOME + "/mistbat/gemini.json"
@@ -11,37 +20,6 @@ USE_SANDBOX = True
 
 DEPRECATED_PAIRS_TO_QUERY = ('audiousd',)        #TODO: Change this to a config file.
 LIMIT_TRANSFERS = 10000             #Was hard coded to 500, changing to an option which is set here.  Need >500, but don't know what the upper limit is.
-
-# Print iterations progress
-def progressBar(iterable, prefix = '', suffix = '', decimals = 1, length = 100, fill = '█', printEnd = "\r"):
-    """
-    Call in a loop to create terminal progress bar
-    @params:
-        iterable    - Required  : iterable object (Iterable)
-        prefix      - Optional  : prefix string (Str)
-        suffix      - Optional  : suffix string (Str)
-        decimals    - Optional  : positive number of decimals in percent complete (Int)
-        length      - Optional  : character length of bar (Int)
-        fill        - Optional  : bar fill character (Str)
-        printEnd    - Optional  : end character (e.g. "\r", "\r\n") (Str)
-    from https://stackoverflow.com/questions/3173320/text-progress-bar-in-terminal-with-block-characters
-    """
-    total = len(iterable)
-    if total >0:
-        # Progress Bar Printing Function
-        def printProgressBar (iteration):
-            percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
-            filledLength = int(length * iteration // total)
-            bar = fill * filledLength + '-' * (length - filledLength)
-            print(f'\r{prefix} |{bar}| {percent}% {suffix}', end = printEnd)
-        # Initial Call
-        printProgressBar(0)
-        # Update Progress Bar
-        for i, item in enumerate(iterable):
-            yield item
-            printProgressBar(i + 1)
-        # Print New Line on Complete
-        print()
 
 def _parse_pair(pair_str):
     '''Parses the pair string into the quote currency (first symbol) and the base currency (2nd symbol)'''
@@ -84,7 +62,7 @@ def update_from_remote(pairs:list = None):
             if p in all_pairs:
                 reduced_pairs.append(p)
             else:
-                print(f"Pair not recognized by Gemini passed in: {p}")
+                logger.warning(f"Pair not recognized by Gemini passed in: {p}")
         all_pairs = reduced_pairs
 
     # Open the private client to Gemini.
@@ -93,29 +71,23 @@ def update_from_remote(pairs:list = None):
 
     #read all transfers to/from Gemini
     transfers = pvt_client.get_past_transfers(limit_transfers=LIMIT_TRANSFERS)
-    print(f"Retrieved {len(transfers)} transfers.")
+    logger.info(f"Retrieved {len(transfers)} transfers.")
 
     #filtering out fiat money transfers into Gemini, since that is not a taxable event.
     deposits = [t for t in transfers if (t['type'] == "Deposit") and (t['currency'] != "USD")]
     withdraws = [t for t in transfers if (t['type'] == "Withdrawal") and (t['status'] != "Advanced")]
-    print(f"Accepted {len(deposits)} deposits and {len(withdraws)} withdrawals.")
+    logger.info(f"Accepted {len(deposits)} deposits and {len(withdraws)} withdrawals.")
     rejected_transfers = [t for t in transfers if (t not in deposits) and (t not in withdraws)]
-    print(f"The following {len(rejected_transfers)} transactions weren't accepted:")
+    logger.info(f"The following {len(rejected_transfers)} transactions weren't accepted:")
     for rt in rejected_transfers:
-        print(rt)
+        logger.warning(rt)
 
     b_resources = {"deposits": deposits, "withdraws": withdraws}
 
     # #read all staking events
-    #staking_events = pvt_client.get_staking_history(limit_transfers=LIMIT_TRANSFERS)
-    #print(f"Retrieved {len(staking_events[0]['transactions'])} staking events.")
-    # for s in staking_events:
-    #     print(s)
-
-    # #read all staking rewards
     staking_events = pvt_client.get_staking_history(limit_transfers=LIMIT_TRANSFERS)
     for provider in staking_events:
-        print(f"Retrieved {len(provider['transactions'])} staking reward events from {provider['providerId']}.")
+        logger.info(f"Retrieved {len(provider['transactions'])} staking reward events from {provider['providerId']}.")
         for event in provider['transactions']:
             txn = {"timestampms":event['dateTime'], 
                    "currency":event['amountCurrency'], 
@@ -127,30 +99,27 @@ def update_from_remote(pairs:list = None):
             elif event['transactionType'] in ['Redeem']:
                 b_resources['withdraws'].append(txn)
             else:
-                print(event)
-            
-    # for s in staking_rewards:
-    #     print(s)
+                logger.warning(event)
 
     trades = {}
-    print(f"Total pairs to loop through: {len(all_pairs)}")
+    logger.info(f"Total pairs to loop through: {len(all_pairs)}")
     for pair in progressBar(all_pairs, prefix = 'Progress:', suffix = 'Complete', length = 50):
         try:
             # convert pair to upper case
             trades[pair.upper()] = pvt_client.get_past_trades(symbol=pair, limit_trades=LIMIT_TRANSFERS)
         except:
-            print("API limit exceeded. Pausing for 5 seconds.")
+            logger.warning("API limit exceeded. Pausing for 5 seconds.")
             time.sleep(5)
             trades[pair.upper()] = pvt_client.get_past_trades(symbol=pair, limit_trades=LIMIT_TRANSFERS)
         #if gemini returns an error when pulling trades, drop the pair, but print a message
         if 'result' in trades[pair.upper()]:
-            print(f"Error received from Gemini: {trades[pair.upper()]}")
+            logger.error(f"Error received from Gemini: {trades[pair.upper()]}")
             del trades[pair.upper()]
             
 
     b_resources["trades"] = trades
 
-    print(f'Writing Gemini Data to {data_file_path}...')
+    logger.debug(f'Writing Gemini Data to {data_file_path}...')
     with open(data_file_path, "w") as f:
         f.write(json.dumps(b_resources, indent=2))
 
@@ -196,7 +165,6 @@ def parse_events():
         # Handle differing Bitcoin Cash symbols
         if obs["currency"] == "BCC":
             obs["currency"] = "BCH"
-
         try:
             temp_var= obs["txHash"]
         except KeyError:
@@ -206,7 +174,6 @@ def parse_events():
                 location="gemini",
                 coin=obs["currency"],
                 amount=float(obs["amount"]),
-                txid=obs["transferId"],
             )
         else:
             send = Send(

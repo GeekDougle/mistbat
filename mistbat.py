@@ -16,37 +16,15 @@ from transactions import (
     Earn,
 )
 from tax import Form8949
+import logging
+import sys
+import os
 
-# Print iterations progress
-def progressBar(iterable, prefix = '', suffix = '', decimals = 1, length = 100, fill = '█', printEnd = "\r"):
-    """
-    Call in a loop to create terminal progress bar
-    @params:
-        iterable    - Required  : iterable object (Iterable)
-        prefix      - Optional  : prefix string (Str)
-        suffix      - Optional  : suffix string (Str)
-        decimals    - Optional  : positive number of decimals in percent complete (Int)
-        length      - Optional  : character length of bar (Int)
-        fill        - Optional  : bar fill character (Str)
-        printEnd    - Optional  : end character (e.g. "\r", "\r\n") (Str)
-    from https://stackoverflow.com/questions/3173320/text-progress-bar-in-terminal-with-block-characters
-    """
-    total = len(iterable)
-    if total >0:
-        # Progress Bar Printing Function
-        def printProgressBar (iteration):
-            percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
-            filledLength = int(length * iteration // total)
-            bar = fill * filledLength + '-' * (length - filledLength)
-            print(f'\r{prefix} |{bar}| {percent}% {suffix}', end = printEnd)
-        # Initial Call
-        printProgressBar(0)
-        # Update Progress Bar
-        for i, item in enumerate(iterable):
-            yield item
-            printProgressBar(i + 1)
-        # Print New Line on Complete
-        print()
+# Add parent directory to path to import logging_config
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+from logging_config import progressBar
+
+logger = logging.getLogger(__name__)
 
 
 def print_usd_exposure():
@@ -57,12 +35,12 @@ def print_usd_exposure():
     net_invested = round(invested - redeemed, 2)
 
     fees = round(sum(ev.fee_amount for ev in fiat_events), 2)
-    print(
+    logger.info(
         "USD Exposure: {} + {} fees (FIAT ONLY) = {:.2f}".format(
             net_invested, fees, net_invested + fees
         )
     )
-    print("Aggregate Fee %: {:.2f}%".format(fees * 100 / (invested - redeemed)))
+    logger.info("Aggregate Fee %: {:.2f}%".format(fees * 100 / (invested - redeemed)))
 
 
 @click.group()
@@ -81,15 +59,15 @@ def lsev(remote_update, data_file_path=None):
     """List all events parsed from observations."""
     events = get_events(loaders.all, remote_update=remote_update)
     if data_file_path == None:
+        logger.info(f"Saving event list to debug file: {data_file_path}")
         for ev in events:
-            print(ev)
+            logger.debug(ev)
     else:
-        print(f"Saving event list to file: {data_file_path}")
+        logger.info(f"Saving event list to file: {data_file_path}")
         with open(data_file_path, "w") as csvfile:
             writer = csv.writer(csvfile)
             writer.writerows(events)
-    print("--------------------")
-    print("{} total events".format(len(events)))
+    logger.info("{} total events".format(len(events)))
     print_usd_exposure()
 
 
@@ -104,7 +82,7 @@ def lsev(remote_update, data_file_path=None):
 # @click.option(
 #     "--minimal", help="Omit everything other than headline", is_flag=True, default=False
 # )
-def lstx(no_group, no_annotations, minimal):
+def lstx(no_group, no_annotations, minimal, data_file_path=None):
     """List all transactions that have been derived from events and annotated."""
     events = get_events(loaders.all)
     transactions = get_transactions(events, XDG_CONFIG_HOME + "/mistbat/tx_match.yaml")
@@ -122,15 +100,23 @@ def lstx(no_group, no_annotations, minimal):
             tx for tx in transactions if getattr(tx, "groups", None) is None
         ]
 
-    # Print transactions
-    for tx in transactions:
-        if minimal:
-            print(tx)
-        else:
-            print(tx.description())
-
-    print("--------------------")
-    print("{} total transactions".format(len(transactions)))
+    # Print or save transactions
+    if data_file_path == None:
+        for tx in transactions:
+            if minimal:
+                logger.debug(tx)
+            else:
+                logger.debug(tx.description())
+    else:
+        logger.info(f"Saving transaction list to file: {data_file_path}")
+        with open(data_file_path, "w") as csvfile:
+            writer = csv.writer(csvfile)
+            for tx in transactions:
+                if minimal:
+                    writer.writerow([str(tx)])
+                else:
+                    writer.writerow([tx.description()])
+    logger.info("{} total transactions".format(len(transactions)))
     print_usd_exposure()
 
 
@@ -143,25 +129,23 @@ def fees():
     )
     transactions = imply_fees(transactions)
 
-    print("\nFees Incurred")
-    print("-------------")
+    logger.info("\nFees Incurred")
     fees = {}
     for tx in transactions:
         fees[tx.__class__.__name__] = fees.get(tx.__class__.__name__, 0) + tx.fee_usd
     for k, v in fees.items():
-        print(f"{k}: USD {v:0.2f}")
-    print("TOTAL: USD {:0.2f}\n".format(sum(fees.values())))
+        logger.debug(f"{k}: USD {v:0.2f}")
+    logger.info("TOTAL: USD {:0.2f}\n".format(sum(fees.values())))
 
-    print("\nFees Incurred (negative values ignored)")
-    print("-----------------------------------------")
+    logger.info("\nFees Incurred (negative values ignored)")
     fees = {}
     for tx in transactions:
         fees[tx.__class__.__name__] = fees.get(tx.__class__.__name__, 0) + max(
             tx.fee_usd, 0
         )
     for k, v in fees.items():
-        print(f"{k}: USD {v:0.2f}")
-    print("TOTAL: USD {:0.2f}\n".format(sum(fees.values())))
+        logger.debug(f"{k}: USD {v:0.2f}")
+    logger.info("TOTAL: USD {:0.2f}\n".format(sum(fees.values())))
 
 
 # @cli.command()
@@ -207,13 +191,13 @@ def updatefmv(verbose):
         )
 
     # Fill remaining missing transactions with public closing price
-    print(f"{len(missing)} missing transactions")
+    logger.info(f"{len(missing)} missing transactions")
     for tx in progressBar(missing, prefix = 'Progress:', suffix = 'Complete', length = 50):
         fmv_data[tx.id] = {"comment": "from crytpocompare daily close api"}
         for coin in tx.affected_coins:
             coin_fmv = get_historical_close(coin, int(tx.time.timestamp()))
             fmv_data[tx.id][coin] = coin_fmv
-            print(f"{coin}@{coin_fmv}\n") if verbose else None
+            logger.debug(f"{coin}@{coin_fmv}\n") if verbose else None
             time.sleep(0.1)
 
     # Convert fmv_data back into fmv_raw and dump to disk
@@ -262,14 +246,14 @@ def tax(aggregated, year, method, output_csv_file = True):
     if method == "HIFO":
         if aggregated:
             aggregated = False
-            print(f"Aggrated is not compatible w/ HIFO accounting style.")
+            logger.error(f"Aggrated is not compatible w/ HIFO accounting style.")
         form_8949 = Form8949(transactions, "HIFO")
     elif method == "FIFO":
         form_8949 = Form8949(transactions, "FIFO")
     else:
         raise RuntimeError(f"Invalid accounting method specified.")
 
-    print("SHORT-TERM CAPITAL GAINS")
+    logger.info("SHORT-TERM CAPITAL GAINS")
     table = PrettyTable(
         [
             "(a) Description",
@@ -286,8 +270,8 @@ def tax(aggregated, year, method, output_csv_file = True):
         table.add_row(line)
         if str(line[-1]).strip():
             total_gain += line[-1]
-    print(table)
-    print(f"TOTAL SHORT-TERM CAPITAL GAIN: USD {total_gain:0.2f}")
+    logger.info(table)
+    logger.info(f"TOTAL SHORT-TERM CAPITAL GAIN: USD {total_gain:0.2f}")
     if output_csv_file:
         filename = f"/Tax Year {year} FORM8949-{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}.csv"
         with open(XDG_DATA_HOME+filename, "w") as csvfile:
@@ -296,7 +280,7 @@ def tax(aggregated, year, method, output_csv_file = True):
             writer.writerows(form_lines)
             writer.writerow(f"TOTAL SHORT-TERM CAPITAL GAIN (USD):,{total_gain:0.2f}")
 
-    print("\nLONG-TERM CAPITAL GAINS")
+    logger.info("\nLONG-TERM CAPITAL GAINS")
     table = PrettyTable(
         [
             "(a) Description",
@@ -313,8 +297,8 @@ def tax(aggregated, year, method, output_csv_file = True):
         table.add_row(line)
         if str(line[-1]).strip():
             total_gain += line[-1]
-    print(table)
-    print(f"TOTAL LONG-TERM CAPITAL GAIN: USD {total_gain:0.2f}")
+    logger.info(table)
+    logger.info(f"TOTAL LONG-TERM CAPITAL GAIN: USD {total_gain:0.2f}")
     if output_csv_file:
         with open(XDG_DATA_HOME+filename, "a") as csvfile:
             writer = csv.writer(csvfile)
@@ -354,8 +338,8 @@ def currentbasis(harvest, method):
     else:
         raise RuntimeError(f"Invalid accounting method specified.")
 
-    print("\nAVAILABLE BASIS REPORT")
-    print(
+    logger.info("\nAVAILABLE BASIS REPORT")
+    logger.info(
         "Note: Coin totals will slighly deviate from 'holdings' since SENDRECV fees do not impact basis.\n"
     )
     table_headings = [
@@ -393,7 +377,7 @@ def currentbasis(harvest, method):
             row.append("")
         table.add_row(row)
         table.add_row([" "] * len(table.field_names))
-    print(table)
+    logger.info(table)
 
 
 # @cli.command()
@@ -421,8 +405,8 @@ def yearlyincome():
     transaction_coins = [t.coin for t in income_transactions]
     coin_list = list(set(transaction_coins))
 
-    print("\nYearly Income")
-    print(
+    logger.info("\nYearly Income")
+    logger.info(
         "Note: This lists totals income for each coin, NOT GAINS.  This assumes you are being paid in a coin."
     )
     table_headings = ["Coin"] + [str(y) for y in year_list]
@@ -445,7 +429,7 @@ def yearlyincome():
             totals.append(f"{sum(coin_amount)}==>${sum(coin_usd):.2f}")
         row = [coin] + totals
         table.add_row(row)
-    print(table)
+    logger.info(table)
 
 
 # @cli.command()
@@ -515,7 +499,7 @@ def holdings(aggregated):
 
         # Print out the total coin values sorted by value
         for coin in coins_sorted_usd:
-            print(
+            logger.info(
                 "{} {:.8f} (USD {:.2f} @ USD {:.2f} per {})".format(
                     coin[0], coin[1], coin[2], coin_spotprices[coin[0]], coin[0]
                 )
@@ -526,7 +510,7 @@ def holdings(aggregated):
         locations = list(totals.keys())
         locations.sort(key=lambda x: location_usd[x], reverse=True)
         for location in locations:
-            print("\n{} (USD {:.2f})".format(location, location_usd[location]))
+            logger.info("\n{} (USD {:.2f})".format(location, location_usd[location]))
 
             # Sort coins within a location by USD value
             coins_sorted_usd = []
@@ -538,14 +522,14 @@ def holdings(aggregated):
             # Print out the total coin values sorted by value
             for coin in coins_sorted_usd:
                 if round(coin[1], 9) != 0:
-                    print(
+                    logger.info(
                         "    {} {:.8f} (USD {:.2f} @ USD {:.2f} per {})".format(
                             coin[0], coin[1], coin[2], coin_spotprices[coin[0]], coin[0]
                         )
                     )
 
-    print("-----------------")
-    print("Total Portfolio Value: USD {:.2f}".format(total_usd))
+    logger.info("-----------------")
+    logger.info("Total Portfolio Value: USD {:.2f}".format(total_usd))
 
 
 # @cli.command()
@@ -565,7 +549,7 @@ def remoteupdate(exchange, pairs = None):
     elif exchange == "cudominer_json":
         loaders.cudominer_json.update_from_remote()
     else:
-        print("Bad exchange specified.")
+        logger.error("Bad exchange specified.")
 
 
 if __name__ == "__main__":

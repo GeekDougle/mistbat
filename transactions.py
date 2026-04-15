@@ -2,6 +2,9 @@ import dateutil.parser
 import pytz
 import hashlib
 import yaml
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class Transaction:
@@ -485,7 +488,7 @@ def fmv_transactions(transactions, tx_fmv_file):
         try:
                 fmvs.pop("comment")
         except KeyError:
-            print(f"Transaction {tx.id} is missing a comment in the fair market value (fmv) file.  This may not be an issue...")
+            logger.warning(f"Transaction {tx.id} is missing a comment in the fair market value (fmv) file.  This may not be an issue...")
 
         if hasattr(tx, "coin"):
             tx.fmv = float(fmvs[tx.coin])

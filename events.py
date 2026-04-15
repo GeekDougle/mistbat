@@ -3,6 +3,9 @@ import dateutil.parser
 import datetime
 import pytz
 import hashlib
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class Event:
@@ -225,7 +228,7 @@ def get_events(loaders, typ=None, remote_update=False):
 
     for loader in loaders:
         if remote_update:
-            print("Remote update from {}".format(loader.__name__))
+        logger.info("Remote update from {}".format(loader.__name__))
             loader.update_from_remote()
         all_events.extend(loader.parse_events())
 
