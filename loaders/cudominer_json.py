@@ -31,14 +31,23 @@ def update_from_remote():
     for d in transactions:
         if d not in unique_transactions:
             unique_transactions.append(d)
+        else:
+            logger.debug(f'Duplicate txn: {d}')
     logger.info(f'Found {len(unique_transactions)} Unique CudoMiner observations.')
 
     #Get deposits and withdrawals
-    deposits = [t for t in unique_transactions if t['category'] == 'revenue']
+    deposits = [t for t in unique_transactions if t['category'] in ('revenue','signup-bonus')]
     logger.info(f"{len(deposits)} deposit transactions imported.")
-    withdraws = [t for t in unique_transactions if ((t['category'] == 'user-withdrawal') or (t['category'] == 'balance-transfer'))]
+    withdraws = [t for t in unique_transactions if (t['category'] in ('user-withdrawal', 'balance-transfer'))]
     logger.info(f"{len(withdraws)} withdrawal transactions imported.")
     b_resources = {"deposits": deposits, "withdraws": withdraws}
+
+    #check for unrecognized transactions
+    temp = [item for item in unique_transactions if item not in deposits]
+    unrecognized_txns = [item for item in temp if item not in withdraws]
+    logger.info(f"The following {len(unrecognized_txns)} transactions weren't accepted:")
+    for t in unrecognized_txns:
+        logger.warning(t)
 
     #write the file out
     logger.debug(f'Writing Cudo Miner Data to {data_file_path}...')

@@ -228,7 +228,7 @@ def get_events(loaders, typ=None, remote_update=False):
 
     for loader in loaders:
         if remote_update:
-        logger.info("Remote update from {}".format(loader.__name__))
+            logger.info("Remote update from {}".format(loader.__name__))
             loader.update_from_remote()
         all_events.extend(loader.parse_events())
 

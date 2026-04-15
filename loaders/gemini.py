@@ -75,7 +75,11 @@ def update_from_remote(pairs:list = None):
 
     #filtering out fiat money transfers into Gemini, since that is not a taxable event.
     deposits = [t for t in transfers if (t['type'] == "Deposit") and (t['currency'] != "USD")]
+    for t in deposits:
+        t['account']='gemini'
     withdraws = [t for t in transfers if (t['type'] == "Withdrawal") and (t['status'] != "Advanced")]
+    for t in withdraws:
+        t['account']='gemini'
     logger.info(f"Accepted {len(deposits)} deposits and {len(withdraws)} withdrawals.")
     rejected_transfers = [t for t in transfers if (t not in deposits) and (t not in withdraws)]
     logger.info(f"The following {len(rejected_transfers)} transactions weren't accepted:")
@@ -92,12 +96,23 @@ def update_from_remote(pairs:list = None):
             txn = {"timestampms":event['dateTime'], 
                    "currency":event['amountCurrency'], 
                    "amount":event['amount'],
-                   "txType": event['transactionType']
+                   "txType": event['transactionType'],
+                   "account":"gemini-stake"
                    }
-            if event['transactionType'] in ['Interest', 'Deposit']:
+            if event['transactionType'] in ['Interest']:
                 b_resources['deposits'].append(txn)
+            elif event['transactionType'] in ['Deposit']:
+                b_resources['deposits'].append(txn)
+                #have to add a transaction to remove the balance from my gemini non-staking account
+                txn['amount'] = -event['amount']
+                txn["account"] = "gemini"
+                b_resources['withdraws'].append(txn)
             elif event['transactionType'] in ['Redeem']:
                 b_resources['withdraws'].append(txn)
+                #have to add a transaction to add the balance to my gemini non-staking account
+                txn['amount'] = -event['amount']
+                txn["account"] = "gemini-stake"
+                b_resources['deposits'].append(txn)
             else:
                 logger.warning(event)
 
@@ -115,6 +130,9 @@ def update_from_remote(pairs:list = None):
         if 'result' in trades[pair.upper()]:
             logger.error(f"Error received from Gemini: {trades[pair.upper()]}")
             del trades[pair.upper()]
+        else:
+           for t in trades[pair.upper()]:
+                t['account']='gemini'     
             
 
     b_resources["trades"] = trades
@@ -147,14 +165,14 @@ def parse_events():
             #staking transactions don't have a hash...
             receive = Receive(
                 time=obs["timestampms"],
-                location="gemini",
+                location=obs["account"],
                 coin=obs["currency"],
                 amount=float(obs["amount"]),
             )
         else:
             receive = Receive(
                 time=obs["timestampms"],
-                location="gemini",
+                location=obs["account"],
                 coin=obs["currency"],
                 amount=float(obs["amount"]),
                 txid=obs["txHash"],
@@ -171,14 +189,14 @@ def parse_events():
             # some Gemini withdrawals don't have a txHash.  Seems like maybe internal transfers?
             send = Send(
                 time=obs["timestampms"],
-                location="gemini",
+                location=obs["account"],
                 coin=obs["currency"],
                 amount=float(obs["amount"]),
             )
         else:
             send = Send(
                 time=obs["timestampms"],
-                location="gemini",
+                location=obs["account"],
                 coin=obs["currency"],
                 amount=float(obs["amount"]),
                 txid=obs["txHash"],
@@ -202,7 +220,7 @@ def parse_events():
             if obs["type"] == "Buy":
                 fiat_exchange = FiatExchange(
                     time=obs["timestampms"],
-                    location="gemini",
+                    location=obs["account"],
                     buy_coin=base_currency,
                     buy_amount=float(obs["amount"]),
                     sell_coin="USD",
@@ -214,7 +232,7 @@ def parse_events():
             else:
                 fiat_exchange = FiatExchange(
                     time=obs["timestampms"],
-                    location="gemini",
+                    location=obs["account"],
                     sell_coin=base_currency,
                     sell_amount=float(obs["amount"]),
                     buy_coin="USD",
@@ -248,7 +266,7 @@ def parse_events():
 
             exchange = Exchange(
                 time=obs["timestampms"],
-                location="gemini",
+                location=obs["account"],
                 buy_coin=buy_coin,
                 buy_amount=buy_amount,
                 sell_coin=sell_coin,

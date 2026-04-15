@@ -34,6 +34,8 @@ def update_from_remote():
     for d in transactions:
         if d not in unique_transactions:
             unique_transactions.append(d)
+        else:
+            logger.debug(f'NDuplicate txn: {d}')
     logger.info(f'Found {len(unique_transactions)} Unique Ledger observations.')
 
     #check for duplicate transaction hashes
@@ -61,9 +63,17 @@ def update_from_remote():
     #Get deposits and withdrawals
     deposits = [t for t in unique_transactions if t['Operation Type'] in ('IN', 'REWARD_PAYOUT')]
     logger.info(f"{len(deposits)} deposit transactions imported.")
-    withdraws = [t for t in unique_transactions if t['Operation Type'] in ('OUT')]
+    # 'NOMINATE', 'BOND', 'WITHDRAW_UNBONDED','UNDELEGATE','DELEGATE' are all transaction types that are just fees.
+    withdraws = [t for t in unique_transactions if t['Operation Type'] in ('OUT', 'NOMINATE', 'BOND', 'WITHDRAW_UNBONDED','UNDELEGATE','DELEGATE')]
     logger.info(f"{len(withdraws)} withdrawal transactions imported.")
     b_resources = {"deposits": deposits, "withdraws": withdraws}
+
+    #check for unrecognized transactions
+    temp = [item for item in unique_transactions if item not in deposits]
+    unrecognized_txns = [item for item in temp if item not in withdraws]
+    logger.info(f"The following {len(unrecognized_txns)} transactions weren't accepted:")
+    for t in unrecognized_txns:
+        logger.warning(t)
 
     #write the file out
     logger.debug(f'Writing Ledger Data to {data_file_path}...')

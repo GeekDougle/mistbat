@@ -548,6 +548,8 @@ def remoteupdate(exchange, pairs = None):
         loaders.gemini.update_from_remote(pairs= pairs)
     elif exchange == "cudominer_json":
         loaders.cudominer_json.update_from_remote()
+    elif exchange == "polkadot_csv":
+        loaders.polkadot_csv.update_from_remote()        
     else:
         logger.error("Bad exchange specified.")
 

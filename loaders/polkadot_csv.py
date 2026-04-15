@@ -39,7 +39,7 @@ def update_from_remote():
     #check for duplicate transaction hashes
     seen = set()
     duplicate = []  #list of indecies of duplicates
-    op_hash_list = [t['Operation Hash'] for t in unique_transactions]
+    op_hash_list = [t['Event Index'] for t in unique_transactions]
     for i, x in enumerate(op_hash_list):
         if x not in seen:
             seen.add(x)
@@ -61,7 +61,7 @@ def update_from_remote():
     #Get deposits and withdrawals
     deposits = [t for t in unique_transactions if t['Action'] in ('Staking(Rewarded)')]
     logger.info(f"{len(deposits)} deposit transactions imported.")
-    withdraws = [t for t in unique_transactions if t['Operation Type'] in ('OUT')]
+    withdraws = [t for t in unique_transactions if t['Action'] in ('OUT')]
     logger.info(f"{len(withdraws)} withdrawal transactions imported.")
     b_resources = {"deposits": deposits, "withdraws": withdraws}
 
